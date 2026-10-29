@@ -48,13 +48,13 @@ jobs:
 
           # Install Livox-SDK2 from source
           git clone --depth 1 https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2
-          mkdir -p /tmp/Livox-SDK2/build
-          cd /tmp/Livox-SDK2/build
-          cmake ..
-          make -j$(nproc)
-          make install
+          cmake -B /tmp/Livox-SDK2/build -S /tmp/Livox-SDK2
+          cmake --build /tmp/Livox-SDK2/build -j$(nproc)
+          cmake --install /tmp/Livox-SDK2/build
           ldconfig
           rm -rf /tmp/Livox-SDK2
+
+          cd "${{ github.workspace }}"
 
           export CCACHE_DIR=${{ github.workspace }}/.ccache
           export PATH="/usr/lib/ccache:$PATH"
