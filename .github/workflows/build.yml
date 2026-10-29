@@ -1,0 +1,81 @@
+name: CI
+on:
+  push:
+    branches: [ "master", "main", "feat/**", "fix/**" ]
+  pull_request:
+    branches: [ "master", "main", "feat/**", "fix/**" ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ros2_build:
+    name: ROS 2 Humble Build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    container:
+      image: ros:humble-ros-base
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-ros2-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-ros2-${{ runner.os }}-
+
+      - name: Install Livox-SDK2 and Dependencies
+        run: |
+          set -e
+
+          source /opt/ros/humble/setup.bash
+
+          DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y \
+            git \
+            ccache \
+            cmake \
+            build-essential
+
+          # Install Livox-SDK2 from source
+          git clone --depth 1 https://github.com/Livox-SDK/Livox-SDK2.git /tmp/Livox-SDK2
+          mkdir -p /tmp/Livox-SDK2/build
+          cd /tmp/Livox-SDK2/build
+          cmake ..
+          make -j$(nproc)
+          make install
+          ldconfig
+          rm -rf /tmp/Livox-SDK2
+
+          export CCACHE_DIR=${{ github.workspace }}/.ccache
+          export PATH="/usr/lib/ccache:$PATH"
+          mkdir -p $CCACHE_DIR
+          ccache --max-size=500M
+
+          rosdep update --rosdistro humble
+          rosdep install --from-paths . --ignore-src -y --rosdistro humble
+
+      - name: Build
+        run: |
+          set -e
+
+          source /opt/ros/humble/setup.bash
+
+          export CCACHE_DIR=${{ github.workspace }}/.ccache
+          export PATH="/usr/lib/ccache:$PATH"
+
+          colcon build \
+            --cmake-args \
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+              -Wno-dev
+
